@@ -1,0 +1,38 @@
+const [coords, setCoords] = useState({})
+
+    const handleSubmit = (values, actions) => {
+
+        setLoading(true)
+
+        firestore()
+            .collection("livraisons")
+            .add({
+                nom: values.nom,
+                designation: values.designation,
+                type: type,
+                tel: values.tel,
+                adresse: values.adresse,
+                status:'en cours',
+                code: values.code,
+                createdAt: firestore.FieldValue.serverTimestamp(),
+                coords: coords,
+                userId: auth().currentUser.uid
+
+            })
+            .then(() => {
+                setLoading(false)
+                Alert.alert("Poste de Livraison", "Livraison poster avec success, un livreur va bientot prendre votre commande !!!",
+                    [{
+                        text: "ok", onPress: () => navigation.goBack()
+                    }]
+                )
+            })
+            .catch((e) => console.error("erreur lors de l'enregistrement ",e))
+
+
+    }
+    
+    
+    
+    const {longitude,latitude} = position.coords
+                  setCoords({long: longitude, lat: latitude})
