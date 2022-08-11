@@ -1,13 +1,34 @@
-import { Button, Card, Text } from '@rneui/base';
+import { Badge, Button, Card, Icon, Text } from '@rneui/base';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ImageBackground, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, ImageBackground, SafeAreaView, StyleSheet, View } from 'react-native';
 import Colors from '../../constants/Colors';
 
 import auth from "@react-native-firebase/auth";
 import firestore from '@react-native-firebase/firestore';
+import { FloatingAction } from 'react-native-floating-action';
 
+const Item = ({ designation, status, createdAt, index }) => (
+    <Card key={index} containerStyle={styles.deliveryItem}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 20, }}>{designation}</Text>
+
+            <Badge
+                status='warning'
+                value={status}
+                badgeStyle={{ height: 30 }}
+                textStyle={{ fontSize: 20, textAlign: 'center' }}
+            />
+            <Text style={{ fontSize: 20 }}>
+                {new Date(createdAt.seconds * 1000 + createdAt.nanoseconds / 1000000).toDateString('fr-FR', { month: 'long', day: 'numeric' })}
+            </Text>
+        </View>
+    </Card>
+);
 function LivraisonsScreen({ navigation }) {
 
+    const renderItem = ({ item }) => (
+        <Item index={item.index} designation={item.designation} status={item.status} createdAt={item.createdAt} />
+    );
     const [livraisons, setLivraisons] = useState([])
     const [load, setLoad] = useState(null)
     let tab = []
@@ -43,54 +64,63 @@ function LivraisonsScreen({ navigation }) {
 
 
     return (
-        <View style={{ alignContent: 'center' }}>
+        <SafeAreaView style={{ alignContent: 'center' }}>
             <ImageBackground
                 source={require("../../assets/back-home.png")}
                 style={{ width: '100%', height: '100%' }}>
 
-                <View style={{ justifyContent: 'center', alignContent: 'center', alignItems: 'center', marginVertical: 100 }}>
+                <View style={{ justifyContent: 'center', alignContent: 'center', alignItems: 'center', marginVertical: 20, marginBottom:120, }}>
 
-                    <Button
-                        title="Ajouter une livraison"
-                        buttonStyle={{
-                            backgroundColor: Colors.orange,
-                            borderRadius: 20,
-                        }}
-                        containerStyle={{
-                            width: 300,
-                            marginHorizontal: 75,
-                            marginVertical: 10,
-                            justifyContent: 'center',
-                            alignContent: 'center'
-                        }}
-                        titleStyle={styles.txtbutton}
-                        onPress={() => { navigation.navigate("PosterLivraison") }}
-                    />
                     {
                         load && <ActivityIndicator color={Colors.orange} size={'large'} />
                     }
-                    {
+                    {/* {
                         livraisons.map((item, index) => {
-                            return(
-                            <Card containerStyle={{ width: 300, marginHorizontal: 75, borderRadius: 20 }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <Text style={{ fontSize: 15 }}>{item.designation}</Text>
-                                    <Text>
-                                        {item.status}
-                                    </Text>
-                                    <Text>
-                                        {item.createdAt.seconds}
-                                    </Text>
-                                </View>
-                            </Card>
+                            return (
+                                <Card key={index} containerStyle={styles.deliveryItem}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 20, }}>{item.designation}</Text>
+
+                                        <Badge
+                                            status='warning'
+                                            value={item.status}
+                                            badgeStyle={{ height: 30 }}
+                                            textStyle={{ fontSize: 20, textAlign: 'center' }}
+                                        />
+                                        <Text style={{ fontSize: 20 }}>
+                                            {new Date(item.createdAt.seconds * 1000 + item.createdAt.nanoseconds / 1000000).toDateString('fr-FR', { month: 'long', day: 'numeric' })}
+                                        </Text>
+                                    </View>
+                                </Card>
                             )
                         })
-                    }
+                    } */}
 
+                    <FlatList
+                        inverted
+                        showsVerticalScrollIndicator={false}
+                        showsHorizontalScrollIndicator={false}
+                        data={livraisons}
+                        renderItem={renderItem}
+                        keyExtractor={item => item.id}
+                    />
                 </View>
+                <FloatingAction
+                    buttonSize={70}
+                    floatingIcon={<Icon name='add'
+                        color={Colors.white}
+                        size={25} />}
+                    position='center'
+                    showBackground={false}
+                    color={Colors.orange}
+                    dismissKeyboardOnPress
+                    iconWidth={30}
+                    iconHeight={30}
+                    onPressMain={() => navigation.navigate("PosterLivraison")}
+                />
             </ImageBackground>
 
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -103,4 +133,11 @@ const styles = StyleSheet.create({
         textAlign: "center",
         color: Colors.white
     },
+    deliveryItem: {
+        marginLeft: 20,
+        marginRight: 20,
+        //backgroundColor:Colors.orange,
+        width: '90%',
+        borderRadius: 20
+    }
 })
