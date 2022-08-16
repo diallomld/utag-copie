@@ -7,30 +7,16 @@ import Colors from '../../constants/Colors';
 const { width } = Dimensions.get('window')
 
 
-function ActiveOrderScreen({ navigation, route }) {
+function DelivredOrderScreen({ navigation, route }) {
 
   const [livraisons, setLivraisons] = useState([])
   const [load, setLoad] = useState(null)
   const [cptNew, setcptNew] = useState(0)
   let tab = []
 
-  const { coords } = route.params
-  const destination = []
 
-  const getCoordsClient = async (docId) => {
 
-    await firestore()
-      .collection("livraisons")
-      .doc(`${docId}`)
-      .get()
-      .then(data => {
-          destination.push(data.data().coords.long, data.data().coords.lat)
-      })
-      .catch(e => console.error("impossible de recuperer la destination", e))
-
-  }
-
-  const Item = ({ designation, type, index, createdAt, docId }) => (
+  const Item = ({ designation, type, index, createdAt }) => (
     <>
 
       <TouchableOpacity onPress={() => {
@@ -41,18 +27,13 @@ function ActiveOrderScreen({ navigation, route }) {
           `Demarrer la course...`,
           [
             {
-              text: "Demander moi apres",
-              onPress: () => console.log("plustard"),
+              text: "Cancel",
+              onPress: () => console.log("Cancel Pressed"),
               style: "cancel"
             },
             {
-              text: "Demarrer la course",
-              onPress: () => {
-                getCoordsClient(docId)
-                  .then(() => navigation.navigate("navigation", { coords: coords, docId: docId, destination: destination })
-                  )
-                  .catch(() => console.error('impossble de recuperer la destination'))
-              },
+              text: "Ok",
+              onPress: () => {},
             }
           ]
         );
@@ -88,16 +69,16 @@ function ActiveOrderScreen({ navigation, route }) {
 
   const renderItem = ({ item }) => (
 
-    <Item docId={item.docId} type={item.type} nom={item.nom} createdAt={item.createdAt} index={item.index} designation={item.designation} />
+    <Item userId={item.userId} type={item.type} nom={item.nom} createdAt={item.createdAt} index={item.index} designation={item.designation} />
 
   );
 
-  const getActiveDelivery = () => {
+  const getDeliveredOrder = () => {
 
     setLoad(true)
     firestore()
       .collection("livraisons")
-      .where('status', '==', 'accepter')
+      .where('status', '==', 'livrer')
       .get()
       .then(data => {
         if (data.empty) {
@@ -116,7 +97,6 @@ function ActiveOrderScreen({ navigation, route }) {
             designation: doc.data().designation,
             createdAt: doc.data().createdAt,
             docId: doc.id,
-
           })
         })
         setLivraisons(tab)
@@ -130,7 +110,7 @@ function ActiveOrderScreen({ navigation, route }) {
 
   useEffect(() => {
     //console.log(JSON.stringify(coords))
-    getActiveDelivery()
+    getDeliveredOrder()
   }, [])
 
   return (
@@ -142,7 +122,7 @@ function ActiveOrderScreen({ navigation, route }) {
           load && <ActivityIndicator color={Colors.orange} size={'large'} />
         }
 
-        <Text style={{fontSize:20, fontWeight:'bold'}}>{cptNew} Nouvelle(s) Commande acceptee(s)</Text>
+        <Text style={{ fontSize: 20, fontWeight:'bold' }}>{cptNew} Livraison(s) effectuee(s)</Text>
 
         <FlatList
           inverted
@@ -159,9 +139,5 @@ function ActiveOrderScreen({ navigation, route }) {
     </SafeAreaView>
   );
 }
-
-
-
-
-export default ActiveOrderScreen
+export default DelivredOrderScreen
 
