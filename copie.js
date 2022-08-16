@@ -1,192 +1,153 @@
-import { Button, Input } from '@rneui/base';
-import { Image } from '@rneui/themed';
-import React, { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Colors from '../constants/Colors';
+import React, { createContext, useState } from 'react';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
+import { useNavigation } from '@react-navigation/native';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-import auth from "@react-native-firebase/auth";
-import { Formik } from 'formik';
-import * as yup from 'yup';
+export const AuthClientContext = createContext();
 
-import Icon from "react-native-vector-icons/FontAwesome"
-import { AuthClientContext } from '../services/clients/AuthClientProvider';
-function RegisterScreen({ navigation }) {
+const AuthClientProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
 
-    const credentials = {
-        email: '',
-        password: '',
-    }
+  const navigation = useNavigation()
 
-    const livreurValidationSchema = yup.object().shape({
-        email: yup
-            .string()
-            .email("Veuillez entrer une adresse e-mail valide")
-            .required("L'email est obligatoire"),
-        password: yup
-            .string()
-            .matches(/\w*[a-z]\w*/, "Le mot de passe doit comporter une lettre")
-            .matches(/\w*[A-Z]\w*/, "Le mot de passe doit comporter une lettre majuscule")
-            .matches(/\d/, "Password must have a number")
-            .matches(/[!@#$%^&*()\-_"=+{}; :,<.>]/, "Le mot de passe doit avoir un caractère spécial")
-            .min(8, ({ min }) => `Le mot de passe doit comporter au moins ${min} caractères.`)
-            .required('Le mot de passe est obligatoire'),
-    })
+  return (
+    <AuthClientContext.Provider
+      value={{
+        user,
+        setUser,
+        login: async (email, password) => {
+          try {
+            await auth().signInWithEmailAndPassword(email, password);
+          } catch (e) {
+            console.log(e);
+          }
+        },
+        googleLogin: async () => {
+          try {
+            // Get the users ID token
+            const { idToken } = await GoogleSignin.signIn();
 
-    const [livreur, setLivreur] = useState(credentials)
-    const [isShow, setIsShow] = useState(true)
-    const [loading, setLoading] = useState(false)
-    const [isLogged, setIsLogged] = useState(false)
+            // Create a Google credential with the token
+            const googleCredential = auth.GoogleAuthProvider.credential(idToken);
 
-    const { setUser } = useContext(AuthClientContext)
+            // Sign-in the user with the credential
+            await auth().signInWithCredential(googleCredential)
+              // Use it only when user Sign's up, 
+              // so create different social signup function
+              .then(() => {
+                //Once the user creation has happened successfully, we can add the currentUser into firestore
+                //with the appropriate details.
+                // console.log('current User', auth().currentUser);
+                firestore().collection('clients').doc(auth().currentUser.uid)
+                  .set({
+                    nom: '',
+                    tel: '',
+                    email: auth().currentUser.email,
+                    createdAt: firestore.Timestamp.fromDate(new Date()),
 
-    const handleSubmit = (values, actions) => {
+                  })
+                  //ensure we catch any errors at this stage to advise us if something does go wrong
+                  .catch(error => {
+                    console.log('Something went wrong with added user to firestore: ', error);
+                  })
+              })
+              //we need to catch the whole sign up process if it fails too.
+              .catch(error => {
+                console.log('Something went wrong with sign up: ', error);
+              });
+          } catch (error) {
+            console.log({ error });
+          }
+        },
+        fbLogin: async () => {
+          try {
+            // Attempt login with permissions
+            const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
 
-        setLoading(true)
-        auth()
-            .signInWithEmailAndPassword(values.email, values.password)
-            .then(() => {
-                setLoading(false)
-                Alert.alert('Connexion', "Bravo, Connexion reussit !",
-                    [
-                        { text: "OK", onPress: () => navigation.push("DashbordLivreur") }
-                    ]
-                )
-            })
-            .catch(error => {
-                setLoading(false)
-                if (error.code === 'auth/email-already-in-use') {
-                    alert('Cette adresse e-mail est déjà utilisée !');
-                }
+            if (result.isCancelled) {
+              throw 'User cancelled the login process';
+            }
 
-                if (error.code === 'auth/invalid-email') {
-                    alert("Cette adresse e-mail n'est pas valide !");
-                }
-                if (error.code === 'auth/user-not-found') {
-                    alert("Il n'y a pas d'enregistrement d'utilisateur correspondant à cet identifiant. L'utilisateur a peut-être été supprimé !");
-                }
+            // Once signed in, get the users AccesToken
+            const data = await AccessToken.getCurrentAccessToken();
 
-                console.alert(error);
-            });
+            if (!data) {
+              throw 'Something went wrong obtaining access token';
+            }
 
-    }
+            // Create a Firebase credential with the AccessToken
+            const facebookCredential = auth.FacebookAuthProvider.credential(data.accessToken);
 
-    const onAuthStateChanged = (user) => {
-        //console.log('user', user);
-        if (user) {
-            setIsLogged(true)
-            setUser(user)
-            navigation.navigate("DashbordLivreur", {
-                livreur: user
-            })
-        }else{
-            setIsLogged(false)
-        }
-    }
-    useEffect(() => {
-        const subscriber = auth().onAuthStateChanged(onAuthStateChanged);
-        return subscriber; // unsubscribe on unmount
-    }, []);
+            // Sign-in the user with the credential
+            await auth().signInWithCredential(facebookCredential)
+              // Use it only when user Sign's up, 
+              // so create different social signup function
+              .then(() => {
+                //Once the user creation has happened successfully, we can add the currentUser into firestore
+                //with the appropriate details.
+                console.log('current User', auth().currentUser);
+                firestore().collection('clients').doc(auth().currentUser.uid)
+                  .set({
+                    nom: '',
+                    tel: '',
+                    email: auth().currentUser.email,
+                    createdAt: firestore.Timestamp.fromDate(new Date()),
+                  })
+                  //ensure we catch any errors at this stage to advise us if something does go wrong
+                  .catch(error => {
+                    console.log('Something went wrong with added user to firestore: ', error);
+                  })
+              })
+              //we need to catch the whole sign up process if it fails too.
+              .catch(error => {
+                console.log('Something went wrong with sign up: ', error);
+              });
+          } catch (error) {
+            console.log({ error });
+          }
+        },
+        register: async (email, password,tel, nom) => {
+          try {
+            await auth().createUserWithEmailAndPassword(email, password)
+              .then(() => {
+                //Once the user creation has happened successfully, we can add the currentUser into firestore
+                //with the appropriate details.
+                firestore().collection('clients').doc(auth().currentUser.uid)
+                  .set({
+                    nom: nom,
+                    tel: tel,
+                    email: email,
+                    createdAt: firestore.Timestamp.fromDate(new Date()),
+                  })
+                  .then(() => {
+                      navigation.navigate("Tabs",{ screen:'HomeClient'})
+                  })
+                  //ensure we catch any errors at this stage to advise us if something does go wrong
+                  .catch(error => {
+                    console.log('Something went wrong with added user to firestore: ', error);
+                  })
+              })
+              //we need to catch the whole sign up process if it fails too.
+              .catch(error => {
+                console.log('Something went wrong with sign up: ', error);
+              });
+          } catch (e) {
+            console.log(e);
+          }
+        },
+        logout: async () => {
+          try {
+            await auth().signOut().then(() => console.log("deconnexion reussit"))
+          } catch (e) {
+            console.error(e);
+          }
+        },
+      }}>
+      {children}
+    </AuthClientContext.Provider>
+  );
+};
 
-    return (
-        <View style={{ alignContent: 'center' }}>
-            <ImageBackground
-                source={require("../assets/back-home.png")}
-                style={{ width: '100%', height: '100%' }}>
-
-                <View style={{ justifyContent: 'center', alignContent: 'center', alignItems: 'center', marginVertical: 100 }}>
-                    {
-                        isLogged && (
-                            <View>
-                                <Text>connexion en cours...</Text>
-                                 <ActivityIndicator color={Colors.orange} size={'large'} />
-                            </View>
-                        )
-                    }
-                    <Image
-                        source={require("../assets/logutag.png")}
-                        style={{ width: 390, height: 200 }}
-                    />
-                    <Formik
-                        initialValues={livreur}
-                        onSubmit={(values, actions) => handleSubmit(values, actions)}
-                        validationSchema={livreurValidationSchema}
-                    >
-                        {({ handleChange, handleBlur, handleSubmit, values, touched, isValid, errors }) => (
-                            <>
-                                <Input
-                                    placeholder="saisir email ou telephone"
-                                    leftIcon={{ type: 'font-awersome', name: 'mail' }}
-                                    value={values.email}
-                                    onBlur={handleBlur('email')}
-                                    onChangeText={handleChange("email")}
-                                    autoCorrect={false}
-                                    errorMessage={(errors.email && touched.email) && errors.email}
-                                    errorStyle={styles.errorInput}
-                                    keyboardType="email-address"
-
-                                />
-                                <Input placeholder="Mot de passe"
-                                    leftIcon={{ type: 'AntDesign', name: 'lock' }}
-                                    secureTextEntry={isShow}
-                                    rightIcon={
-                                        <TouchableOpacity onPress={() => setIsShow(!isShow)}>
-                                            <Icon
-                                                name={isShow ? 'eye' : 'eye-slash'}
-                                                size={30}
-                                                color={Colors.orange}
-                                            />
-                                        </TouchableOpacity>
-                                    }
-                                    onChangeText={handleChange("password")}
-                                    value={values.password}
-                                    onBlur={handleBlur('password')}
-                                    autoCorrect={false}
-                                    errorMessage={(errors.password && touched.password) && errors.password}
-                                    errorStyle={styles.errorInput}
-                                />
-                                {
-                                    loading && <ActivityIndicator color={Colors.orange} size={'large'} />
-                                }
-                                <Button
-                                    title="Se connecter"
-                                    buttonStyle={{
-                                        backgroundColor: Colors.orange,
-                                        borderRadius: 20,
-                                    }}
-                                    containerStyle={{
-                                        width: 200,
-                                        marginHorizontal: 75,
-                                        marginVertical: 10,
-                                        justifyContent: 'center',
-                                        alignContent: 'center'
-                                    }}
-                                    titleStyle={styles.txtbutton}
-                                    // onPress={() => {
-                                    //     navigation.navigate("DashbordLivreur")
-                                    // }}
-                                    disabled={!isValid}
-                                    onPress={handleSubmit}
-                                />
-                            </>
-                        )}
-                    </Formik>
-                </View>
-            </ImageBackground>
-
-        </View>
-    );
-}
-
-export default RegisterScreen;
-
-
-const styles = StyleSheet.create({
-    txtbutton: {
-        fontSize: 30,
-        textAlign: "center",
-        color: Colors.white
-    },
-    errorInput: {
-        fontSize: 18
-    },
-})
+export default AuthClientProvider
