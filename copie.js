@@ -1,153 +1,276 @@
-import React, { createContext, useState } from 'react';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
-import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
-import { useNavigation } from '@react-navigation/native';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import React, { useState, useEffect } from 'react';
 
-export const AuthClientContext = createContext();
+import { View, ImageBackground, TouchableOpacity, Text, Image, Platform, PermissionsAndroid } from 'react-native';
+import ColorsApp from '../../constants/Colors';
+import { StyleSheet } from 'react-native';
 
-const AuthClientProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Badge } from '@rneui/base';
 
-  const navigation = useNavigation()
+import { qrcode, delivery, messages, maps } from "../../constants/Images";
+import Colors from '../../constants/Colors';
+import QRCode from 'react-native-qrcode-svg';
+import firestore from '@react-native-firebase/firestore'
+import auth from '@react-native-firebase/auth'
+import messaging from '@react-native-firebase/messaging';
+import Geolocation from "react-native-geolocation-service";
+
+function LivreurAuthScreen({ navigation }) {
+
+
+  const [nbqrcode, setNbqrcode] = useState(0)
+  const [token, setToken] = useState('')
+  const [coords, setCoords] = useState({})
+  const [idDocLivreur, setidDocLivreur] = useState('')
+
+  
+  // const sendMsg = async()=>{
+  //   await admin.messaging().sendToDevice(
+  //     token, // ['token_1', 'token_2', ...]
+  //     {
+  //       data: {
+  //         owner: 'lamine',
+  //         user: 'fall',
+  //         body: 'salut ca marche',
+  //       },
+  //     }, {
+  //       // Required for background/quit data-only messages on iOS
+  //       contentAvailable: true,
+  //       // Required for background/quit data-only messages on Android
+  //       priority: 'high',
+  //     }).then(()=> console.log('message envoye'))
+  //     .catch(e=>console.log(e))
+  // }
+
+
+  const GetLocation = async () => {
+
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: "Permission de la localisation",
+          message:
+            "Utag a besoin de votre localisation ",
+          buttonNeutral: "Demander moi plus tard",
+          buttonNegative: "Cancel",
+          buttonPositive: "OK"
+        }
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        //alert("La geolocalisation est active");
+       Geolocation.getCurrentPosition(
+          (position) => {
+
+            //console.log(position.coords)
+            const { longitude, latitude } = position.coords
+
+            setCoords({ long: longitude, lat: latitude })
+          },
+          (error) => {
+            // See error code charts below.
+            console.error(error.code, error.message);
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000, forceRequestLocation:true }
+        );
+      } else {
+        alert("Permission de la localistion non accordé");
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  const getTheDeviceToken = () => {
+
+    if (Platform.OS == 'ios') {
+      messaging().getAPNSToken().then(token => {
+        setToken(token)
+        console.log('ios token')
+      });
+    } else {
+      messaging()
+        .getToken()
+        .then(token =>  {
+          setToken(token)
+          console.log('android token')
+        });
+    }
+    // Listen to whether the token changes
+    messaging().onTokenRefresh(token => {
+      setToken(token)
+      console.log('// Listen to whether the token changes')
+    });
+  }
+
+  const getNbqrcode = () => {
+    firestore()
+      .collection("livreurs")
+      .where('email', '==', auth().currentUser.email)
+      .get()
+      .then(querySnapshot => {
+        querySnapshot.forEach(data => {
+          setNbqrcode(data.data().nbqrcode)
+          setidDocLivreur(data.id)
+          if (token!="" && coords!=null) {
+            
+            firestore().collection("livreurs")
+              .doc(data.id)
+              .update({
+                token: token,
+                coords: coords
+              })
+          }
+          //console.error('data',data.data())
+        })
+      })
+      .catch(e => console.error("erreurrrr", e))
+
+
+  }
+
+  useEffect(() => {
+    GetLocation()
+    getTheDeviceToken()
+    getNbqrcode()
+    //sendMsg()
+
+  }, [])
 
   return (
-    <AuthClientContext.Provider
-      value={{
-        user,
-        setUser,
-        login: async (email, password) => {
-          try {
-            await auth().signInWithEmailAndPassword(email, password);
-          } catch (e) {
-            console.log(e);
-          }
-        },
-        googleLogin: async () => {
-          try {
-            // Get the users ID token
-            const { idToken } = await GoogleSignin.signIn();
+    <GestureHandlerRootView style={{ flex: 1 }}>
 
-            // Create a Google credential with the token
-            const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      <View style={Styles.container}>
+        <ImageBackground
+          source={require("../../assets/back-home.png")}
+          style={{ width: '100%', height: '100%' }}>
+          <View style={Styles.authSection}>
 
-            // Sign-in the user with the credential
-            await auth().signInWithCredential(googleCredential)
-              // Use it only when user Sign's up, 
-              // so create different social signup function
-              .then(() => {
-                //Once the user creation has happened successfully, we can add the currentUser into firestore
-                //with the appropriate details.
-                // console.log('current User', auth().currentUser);
-                firestore().collection('clients').doc(auth().currentUser.uid)
-                  .set({
-                    nom: '',
-                    tel: '',
-                    email: auth().currentUser.email,
-                    createdAt: firestore.Timestamp.fromDate(new Date()),
+            {/* <Avatar rounded source={avatar} size='large' containerStyle={{ marginVertical: 20 }} /> */}
+            <View style={{ width: 150, backgroundColor: Colors.white, marginVertical: 20, borderRadius: 15 }}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', alignContent: 'center', marginVertical: 20, }}>
 
-                  })
-                  //ensure we catch any errors at this stage to advise us if something does go wrong
-                  .catch(error => {
-                    console.log('Something went wrong with added user to firestore: ', error);
-                  })
-              })
-              //we need to catch the whole sign up process if it fails too.
-              .catch(error => {
-                console.log('Something went wrong with sign up: ', error);
-              });
-          } catch (error) {
-            console.log({ error });
-          }
-        },
-        fbLogin: async () => {
-          try {
-            // Attempt login with permissions
-            const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+                <QRCode
+                  value="Modou Fall, ID: 001 C.I.N: 16481996000"
+                  // color={Colors.white}
+                  // backgroundColor={Colors.orange}
+                  size={100}
+                />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'column', justifyContent: 'space-around' }}>
+              <Badge status={qrcode <= 0 ? 'error' : 'success'} badgeStyle={{ width: 100, height: 40, marginVertical: 10 }} value={nbqrcode} textStyle={{ color: Colors.white, fontSize: 25 }} />
+              <View style={{ height: 40, width: 200, borderRadius: 20, backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center', alignContent: 'center', textAlignVertical: 'center' }}>
 
-            if (result.isCancelled) {
-              throw 'User cancelled the login process';
-            }
+                <Text style={{ fontSize: 20, }}>Livraisons disponibles</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginVertical: 40, }}>
 
-            // Once signed in, get the users AccesToken
-            const data = await AccessToken.getCurrentAccessToken();
+              <View style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', }}>
+                <TouchableOpacity onPress={() => {
+                  navigation.navigate("navigation")
+                }}
+                  style={Styles.btn}>
+                  <Image
+                    source={maps}
+                    style={{ width: 90, height: 90 }}
+                  />
+                </TouchableOpacity>
 
-            if (!data) {
-              throw 'Something went wrong obtaining access token';
-            }
+                <Text style={Styles.txtbtn}>La Carte</Text>
 
-            // Create a Firebase credential with the AccessToken
-            const facebookCredential = auth.FacebookAuthProvider.credential(data.accessToken);
+              </View>
+              <View style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginHorizontal: 20 }}>
+                <TouchableOpacity onPress={() => {
+                  //navigation.navigate("MessageClient")
+                }}
+                  style={Styles.btn}>
+                  <Image
+                    source={messages}
+                    style={{ width: 90, height: 90 }}
+                  />
+                </TouchableOpacity>
 
-            // Sign-in the user with the credential
-            await auth().signInWithCredential(facebookCredential)
-              // Use it only when user Sign's up, 
-              // so create different social signup function
-              .then(() => {
-                //Once the user creation has happened successfully, we can add the currentUser into firestore
-                //with the appropriate details.
-                console.log('current User', auth().currentUser);
-                firestore().collection('clients').doc(auth().currentUser.uid)
-                  .set({
-                    nom: '',
-                    tel: '',
-                    email: auth().currentUser.email,
-                    createdAt: firestore.Timestamp.fromDate(new Date()),
-                  })
-                  //ensure we catch any errors at this stage to advise us if something does go wrong
-                  .catch(error => {
-                    console.log('Something went wrong with added user to firestore: ', error);
-                  })
-              })
-              //we need to catch the whole sign up process if it fails too.
-              .catch(error => {
-                console.log('Something went wrong with sign up: ', error);
-              });
-          } catch (error) {
-            console.log({ error });
-          }
-        },
-        register: async (email, password,tel, nom) => {
-          try {
-            await auth().createUserWithEmailAndPassword(email, password)
-              .then(() => {
-                //Once the user creation has happened successfully, we can add the currentUser into firestore
-                //with the appropriate details.
-                firestore().collection('clients').doc(auth().currentUser.uid)
-                  .set({
-                    nom: nom,
-                    tel: tel,
-                    email: email,
-                    createdAt: firestore.Timestamp.fromDate(new Date()),
-                  })
-                  .then(() => {
-                      navigation.navigate("Tabs",{ screen:'HomeClient'})
-                  })
-                  //ensure we catch any errors at this stage to advise us if something does go wrong
-                  .catch(error => {
-                    console.log('Something went wrong with added user to firestore: ', error);
-                  })
-              })
-              //we need to catch the whole sign up process if it fails too.
-              .catch(error => {
-                console.log('Something went wrong with sign up: ', error);
-              });
-          } catch (e) {
-            console.log(e);
-          }
-        },
-        logout: async () => {
-          try {
-            await auth().signOut().then(() => console.log("deconnexion reussit"))
-          } catch (e) {
-            console.error(e);
-          }
-        },
-      }}>
-      {children}
-    </AuthClientContext.Provider>
+                <Text style={Styles.txtbtn}>Messages</Text>
+
+              </View>
+              <View style={{ flexDirection: 'column', justifyContent: 'center', alignItems: 'center', }}>
+                <TouchableOpacity onPress={() => {
+                  navigation.navigate("Courses",{coords:coords, idDocLivreur: idDocLivreur})
+                }}
+                  style={Styles.btn}>
+                  <Image
+                    source={delivery}
+                    style={{ width: 70, height: 70 }}
+                  />
+                </TouchableOpacity>
+
+                <Text style={Styles.txtbtn}>Courses</Text>
+
+              </View>
+            </View>
+
+          </View>
+        </ImageBackground>
+      </View>
+    </GestureHandlerRootView>
   );
-};
+}
 
-export default AuthClientProvider
+
+export default LivreurAuthScreen;
+
+const Styles = StyleSheet.create({
+  container: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1
+  },
+  btn: {
+    borderRadius: 100,
+    backgroundColor: Colors.white,
+    width: 100,
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  txtbtn: {
+    fontSize: 25
+  },
+  btnAuth: {
+    backgroundColor: ColorsApp.white,
+    borderRadius: 10,
+    width: 120,
+    height: 50,
+    marginHorizontal: 10,
+    marginVertical: 10,
+    flexDirection: "row",
+    justifyContent: 'space-evenly',
+    alignItems: 'center'
+  },
+  btnAuth2: {
+    backgroundColor: ColorsApp.white,
+    borderRadius: 10,
+    width: 170,
+    height: 50,
+    marginHorizontal: 10,
+    marginVertical: 10,
+    flexDirection: "row",
+    justifyContent: 'space-evenly',
+    alignItems: 'center'
+  },
+  authSection: {
+    height: 500,
+    width: '100%',
+    alignItems: 'center',
+    borderBottomEndRadius: 20,
+    borderBottomStartRadius: 20,
+    backgroundColor: ColorsApp.orange
+  },
+  txtConAuth: {
+    fontSize: 20,
+    color: ColorsApp.black,
+  },
+});
