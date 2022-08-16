@@ -1,126 +1,188 @@
+import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import React, { useEffect, useState } from 'react'
 import firestore from '@react-native-firebase/firestore';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Icon } from '@rneui/base';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Badge, Card, Icon, Image } from '@rneui/base';
 import Colors from '../../constants/Colors';
-import ActiveOrderScreen from '../orders/ActiveOrderScreen';
-import DeliveredOrderScreen from '../orders/DeliveredOrderScreen';
-import NewOrderScreen from '../orders/NewOrderScreen';
+
+const { width, height } = Dimensions.get('window')
 
 
-const Tab = createBottomTabNavigator();
+function ActiveOrderScreen({ navigation, route }) {
 
-const screenOptions = (route, color) => {
-  let iconName;
+  const [livraisons, setLivraisons] = useState([])
+  const [load, setLoad] = useState(null)
+  const [cptNew, setcptNew] = useState(0)
+  let tab = []
 
-  switch (route.name) {
-    case 'NewOrders':
-      iconName = 'shopping-cart';
-      break;
-    case 'ActiveOrder':
-      iconName = 'notifications-active';
-      break;
-    case 'DeliveredOrder':
-      iconName = 'outbox';
-      break;
-    default:
-      break;
-  }
+  const { coords } = route.params
+  const destination = []
 
-  return <Icon name={iconName} color={color} size={30} />;
-};
+  const getCoordsClient = async (docId) => {
 
-function CourseScreen({ navigation, route }) {
-
-  const { coords, idDocLivreur } = route.params
-  const [cptNew, setCptNew] = useState(0)
-  const [NewDeliveries, setNewDeliveries] = useState(0)
-  const [cptAccepted, setCptAccepted] = useState(0)
-  const [cptDelivered, setCptDelivered] = useState(0)
-
-  const getNewDeliveries = () => {
-    firestore()
+    await firestore()
       .collection("livraisons")
-      .where('status', '==', 'en cours')
-      .onSnapshot({
-        error: (e) => console.error(e),
-        next: (querySnapshot) => {
-          setCptNew(querySnapshot.size)
-          let tab = []
-          querySnapshot.forEach(doc => {
-            tab.push({
-              adresse: doc.data().adresse,
-              tel: doc.data().tel,
-              code: doc.data().code,
-              type: doc.data().type,
-              nom: doc.data().nom,
-              status: doc.data().status,
-              designation: doc.data().designation,
-              createdAt: doc.data().createdAt,
-              docId: doc.id,
-            })
-          })
-          setNewDeliveries(tab)
-        },
-        complete: (e) => console.log('Requete complete')
+      .doc(`${docId}`)
+      .get()
+      .then(data => {
+          destination.push(data.data().coords.long, data.data().coords.lat)
       })
+      .catch(e => console.error("impossible de recuperer la destination", e))
+
   }
-  const getAcceptedDeliveries = () => {
+
+  const Item = ({ designation, type, index, createdAt, docId }) => (
+    <>
+
+      <TouchableOpacity onPress={() => {
+
+
+        Alert.alert(
+          `Commande numero #12-tag ${designation}`,
+          `Demarrer la course...`,
+          [
+            {
+              text: "Demander moi apres",
+              onPress: () => console.log("plustard"),
+              style: "cancel"
+            },
+            {
+              text: "Demarrer la course",
+              onPress: () => {
+                getCoordsClient(docId)
+                  .then(() => navigation.navigate("navigation", { coords: coords, docId: docId, destination: destination })
+                  )
+                  .catch(e => console.error('impossble de recuperer la destination'))
+              },
+            }
+          ]
+        );
+      }}>
+        <Card key={index} containerStyle={{ borderRadius: 10, width: width - 30, }}>
+
+          <Icon name='account-box' size={45} color={Colors.orange} />
+          <Card.Title style={{ fontSize: 20, }}> Designation: {designation}</Card.Title>
+          <View style={{ justifyContent: 'center', flexDirection: 'row' }}>
+            <Icon name='bookmark' size={30} color={Colors.orange} />
+            <Text style={{ fontSize: 20, textAlign: 'center' }}> {type}</Text>
+
+            <Badge
+              status='primary'
+              value={'Active'}
+              badgeStyle={{ height: 30, marginLeft: 10 }}
+              textStyle={{ fontSize: 20, textAlign: 'center' }}
+            />
+          </View>
+
+          <Card.Divider style={{ marginTop: 10 }} />
+          <View style={{ justifyContent: 'center', flexDirection: 'row' }}>
+
+            <Icon name='timer' size={30} color={Colors.orange} />
+            <Text style={{ fontSize: 20, textAlign: 'center', }}>
+              {new Date(createdAt.seconds * 1000 + createdAt.nanoseconds / 1000000).toLocaleString('fr-FR', { month: 'long', day: 'numeric' })}
+            </Text>
+          </View>
+        </Card>
+      </TouchableOpacity >
+    </>
+  );
+
+  const renderItem = ({ item }) => (
+
+    <Item docId={item.docId} type={item.type} nom={item.nom} createdAt={item.createdAt} index={item.index} designation={item.designation} />
+
+  );
+
+  const getActiveDelivery = () => {
+
+    setLoad(true)
     firestore()
       .collection("livraisons")
       .where('status', '==', 'accepter')
-      .onSnapshot({
-        error: (e) => console.error(e),
-        next: (querySnapshot) => {
-          setCptAccepted(querySnapshot.size)
-        },
-        complete: (e) => console.log('Requete complete')
-      })
-  }
-  const getDeliveredDeliveries = () => {
-    firestore()
-      .collection("livraisons")
-      .where('status', '==', 'livrer')
-      .onSnapshot({
-        error: (e) => console.error(e),
-        next: (querySnapshot) => {
-          setCptDelivered(querySnapshot.size)
-        },
-        complete: (e) => console.log('Requete complete')
-      })
+      .get()
+      .then(data => {
+        if (data.empty) {
+          setLoad(false)
+          return
+        }
+        setcptNew(data.size)
+        data.forEach((doc) => {
+          tab.push({
+            adresse: doc.data().adresse,
+            tel: doc.data().tel,
+            code: doc.data().code,
+            type: doc.data().type,
+            nom: doc.data().nom,
+            status: doc.data().status,
+            designation: doc.data().designation,
+            createdAt: doc.data().createdAt,
+            docId: doc.id,
+
+          })
+        })
+        setLivraisons(tab)
+        //console.error('liv ', livraisons)
+        setLoad(false)
+      }).catch(e => console.error(e))
+
+
+
   }
 
   useEffect(() => {
-    getNewDeliveries()
-    getAcceptedDeliveries()
-    getDeliveredDeliveries()
-    console.log(JSON.stringify(coords))
-    console.log('NewDeliveries ', NewDeliveries)
+    //console.log(JSON.stringify(coords))
+    getActiveDelivery()
   }, [])
 
-
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({
-      headerShown: false,
-      tabBarActiveTintColor: Colors.orange,
-      tabBarIcon: ({ color }) => screenOptions(route, color),
+    <SafeAreaView style={{ alignContent: 'center' }}>
 
-    })}>
-      <Tab.Screen initialParams={{ coords, idDocLivreur, NewDeliveries }} name="NewOrders" options={{ title: 'Nouvelle Commande', tabBarLabelStyle: { fontSize: 12 }, tabBarBadge: cptNew, tabBarBadgeStyle: { backgroundColor: Colors.orange, color: Colors.white, } }} component={NewOrderScreen} />
-      <Tab.Screen initialParams={{ coords, idDocLivreur }} name="ActiveOrder" component={ActiveOrderScreen} options={{ title: ' Acceptees', tabBarLabelStyle: { fontSize: 12 }, tabBarBadge: cptAccepted, tabBarBadgeStyle: { backgroundColor: Colors.orange, color: Colors.white, } }} />
-      <Tab.Screen initialParams={{ coords, idDocLivreur }} name="DeliveredOrder" component={DeliveredOrderScreen} options={{ title: 'Delivres', tabBarLabelStyle: { fontSize: 12 }, tabBarBadge: cptDelivered, tabBarBadgeStyle: { backgroundColor: Colors.orange, color: Colors.white, } }} />
-    </Tab.Navigator>
+      <View style={{ justifyContent: 'center', alignContent: 'center', alignItems: 'center', marginVertical: 20, marginBottom: 20 }}>
+
+        {
+          load && <ActivityIndicator color={Colors.orange} size={'large'} />
+        }
+
+        <Text style={{fontSize:20, fontWeight:'bold'}}>{cptNew} Nouvelle(s) Commande acceptee(s)</Text>
+
+        <FlatList
+          inverted
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          data={livraisons}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          windowSize={21}
+        />
+      </View>
+
+
+    </SafeAreaView>
   );
 }
 
-export default CourseScreen;
 
+
+
+export default ActiveOrderScreen
 
 const styles = StyleSheet.create({
+
+
+  button: {
+    borderRadius: 20,
+    padding: 10,
+    elevation: 2
+  },
   txtbutton: {
     fontSize: 30,
     textAlign: "center",
     color: Colors.white
   },
+  deliveryItem: {
+
+    //backgroundColor:Colors.orange,
+    //width: '90%',
+    borderRadius: 20
+  }
+
 })
